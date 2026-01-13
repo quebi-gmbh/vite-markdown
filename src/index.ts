@@ -1,5 +1,5 @@
 import type { Plugin } from 'vite';
-import * as fs from 'node:fs';
+import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import matter from 'gray-matter';
 import { marked } from 'marked';
@@ -127,11 +127,13 @@ async function scanDirectory(
 ): Promise<Record<string, MarkdownNode>> {
   const result: Record<string, MarkdownNode> = {};
 
-  if (!fs.existsSync(dirPath)) {
+  try {
+    await fs.stat(dirPath);
+  } catch {
     return result;
   }
 
-  const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+  const entries = await fs.readdir(dirPath, { withFileTypes: true });
 
   for (const entry of entries) {
     const fullPath = path.join(dirPath, entry.name);
@@ -152,7 +154,7 @@ async function scanDirectory(
     } else if (entry.isFile()) {
       const ext = path.extname(entry.name);
       if (ext === '.md' || ext === '.markdown') {
-        const rawContent = fs.readFileSync(fullPath, 'utf-8');
+        const rawContent = await fs.readFile(fullPath, 'utf-8');
         const name = path.basename(entry.name, ext);
 
         const fileData: MarkdownFileRuntime = {
@@ -361,20 +363,22 @@ export default function markdownPlugin(options: MarkdownPluginOptions = {}): Plu
   /**
    * Collect all markdown files for watching
    */
-  function collectMarkdownFiles(dir: string): string[] {
+  async function collectMarkdownFiles(dir: string): Promise<string[]> {
     const files: string[] = [];
 
-    if (!fs.existsSync(dir)) {
+    try {
+      await fs.stat(dir);
+    } catch {
       return files;
     }
 
-    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    const entries = await fs.readdir(dir, { withFileTypes: true });
 
     for (const entry of entries) {
       const fullPath = path.join(dir, entry.name);
 
       if (entry.isDirectory()) {
-        files.push(...collectMarkdownFiles(fullPath));
+        files.push(...await collectMarkdownFiles(fullPath));
       } else if (entry.isFile()) {
         const ext = path.extname(entry.name);
         if (ext === '.md' || ext === '.markdown') {
@@ -394,8 +398,10 @@ export default function markdownPlugin(options: MarkdownPluginOptions = {}): Plu
 
     // Update watched files
     watchedFiles.clear();
-    const files = collectMarkdownFiles(markdownDir);
-    files.forEach(file => watchedFiles.add(file));
+    const files = await collectMarkdownFiles(markdownDir);
+    for (const file of files) {
+      watchedFiles.add(file);
+    }
 
     // Generate TypeScript declaration if enabled
     if (generateTypes && rootDir) {
@@ -404,12 +410,14 @@ export default function markdownPlugin(options: MarkdownPluginOptions = {}): Plu
       const typesDir = path.dirname(typesPath);
 
       // Create types directory if it doesn't exist
-      if (!fs.existsSync(typesDir)) {
-        fs.mkdirSync(typesDir, { recursive: true });
+      try {
+        await fs.stat(typesDir);
+      } catch {
+        await fs.mkdir(typesDir, { recursive: true });
       }
 
       // Write the type declaration file
-      fs.writeFileSync(typesPath, typeDeclaration, 'utf-8');
+      await fs.writeFile(typesPath, typeDeclaration, 'utf-8');
     }
   }
 
