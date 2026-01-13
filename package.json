@@ -1,0 +1,59 @@
+{
+  "name": "@quebi-gmbh/vite-plugin-markdown",
+  "version": "0.0.1",
+  "description": "Plugin compiling directories of markdown files into a nested json structure",
+  "keywords": [
+    "markdown",
+    "vite",
+    "vite-plugin"
+  ],
+  "license": "MIT",
+  "author": "Florian Pirchmoser",
+  "contributors": [],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/quebi-gmbh/vite-markdown.git"
+  },
+  "files": [
+    "dist",
+    "types"
+  ],
+  "type": "module",
+  "packageManager": "pnpm@9.15.4",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs"
+    },
+    "./preamble": "./types/preamble.d.ts"
+  },
+  "main": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
+  "scripts": {
+    "dev": "tsdown --watch ./src --watch ../common",
+    "build": "tsdown",
+    "prepublishOnly": "pnpm run build",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:ui": "vitest --ui",
+    "test:coverage": "vitest run --coverage"
+  },
+  "dependencies": {
+    "gray-matter": "^4.0.3",
+    "marked": "^17.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "rolldown": "1.0.0-beta.59",
+    "tsdown": "^0.19.0",
+    "typescript": "^5.9.3",
+    "vite": "^6.0.0",
+    "vitest": "^4.0.17"
+  },
+  "peerDependencies": {
+    "vite": "^4.2.0 || ^5.0.0 || ^6.0.0 || ^7.0.0"
+  },
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
+  }
+}

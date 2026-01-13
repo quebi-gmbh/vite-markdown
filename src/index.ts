@@ -1,0 +1,471 @@
+import type { Plugin } from 'vite';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import matter from 'gray-matter';
+import { marked } from 'marked';
+
+export interface MarkdownPluginOptions {
+  /**
+   * Directory containing markdown files to compile
+   * @default 'docs'
+   */
+  directory?: string;
+
+  /**
+   * Virtual module ID to expose the compiled JSON
+   * @default 'virtual:markdown'
+   */
+  virtualModuleId?: string;
+
+  /**
+   * Include patterns for markdown files
+   * @default ["**\/*.md", "**\/*.markdown"]
+   */
+  include?: string | string[];
+
+  /**
+   * Exclude patterns for markdown files
+   * @default [""]
+   */
+  exclude?: string | string[];
+
+  /**
+   * Extract frontmatter from markdown files
+   * @default true
+   */
+  parseFrontmatter?: boolean;
+
+  /**
+   * Parse markdown to HTML
+   * @default false
+   */
+  parseMarkdown?: boolean;
+
+  /**
+   * Generate TypeScript declaration file for the virtual module
+   * @default true
+   */
+  generateTypes?: boolean;
+
+  /**
+   * Output path for the generated type declaration file
+   * @default 'types/markdown.d.ts'
+   */
+  typesOutputPath?: string;
+}
+
+/**
+ * Markdown file structure (runtime - includes all possible fields)
+ */
+export interface MarkdownFileRuntime {
+  path: string;
+  name: string;
+  content: string;
+  frontmatter?: Record<string, any>;
+  body?: string;
+  html?: string;
+}
+
+/**
+ * Markdown file with conditional properties based on options
+ * This is the type-safe version used in generated type declarations
+ */
+export type MarkdownFile<
+  TFrontmatter extends boolean = true,
+  TMarkdown extends boolean = false
+> = {
+  path: string;
+  name: string;
+  content: string;
+} & (TFrontmatter extends true
+  ? {
+      frontmatter?: Record<string, any>;
+      body?: string;
+    }
+  : {}) &
+  (TMarkdown extends true
+    ? {
+        html: string;
+      }
+    : {});
+
+/**
+ * Markdown file node
+ */
+export interface MarkdownFileNode {
+  type: 'file';
+  name: string;
+  path: string;
+  data: MarkdownFileRuntime;
+}
+
+/**
+ * Markdown directory node
+ */
+export interface MarkdownDirectoryNode {
+  type: 'directory';
+  name: string;
+  path: string;
+  children: Record<string, MarkdownNode>;
+}
+
+/**
+ * Markdown node (discriminated union)
+ */
+export type MarkdownNode = MarkdownFileNode | MarkdownDirectoryNode;
+
+// No longer need custom parseFrontmatter - using gray-matter
+
+/**
+ * Recursively scan directory and build nested structure
+ */
+async function scanDirectory(
+  dirPath: string,
+  rootPath: string,
+  shouldParseFrontmatter: boolean,
+  shouldParseMarkdown: boolean
+): Promise<Record<string, MarkdownNode>> {
+  const result: Record<string, MarkdownNode> = {};
+
+  if (!fs.existsSync(dirPath)) {
+    return result;
+  }
+
+  const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+
+  for (const entry of entries) {
+    const fullPath = path.join(dirPath, entry.name);
+    const relativePath = path.relative(rootPath, fullPath);
+
+    if (entry.isDirectory()) {
+      const children = await scanDirectory(fullPath, rootPath, shouldParseFrontmatter, shouldParseMarkdown);
+
+      // Only include directory if it has children
+      if (Object.keys(children).length > 0) {
+        result[entry.name] = {
+          type: 'directory',
+          name: entry.name,
+          path: relativePath,
+          children,
+        };
+      }
+    } else if (entry.isFile()) {
+      const ext = path.extname(entry.name);
+      if (ext === '.md' || ext === '.markdown') {
+        const rawContent = fs.readFileSync(fullPath, 'utf-8');
+        const name = path.basename(entry.name, ext);
+
+        const fileData: MarkdownFileRuntime = {
+          path: relativePath,
+          name,
+          content: rawContent,
+        };
+
+        if (shouldParseFrontmatter) {
+          // Use gray-matter to parse frontmatter
+          const parsed = matter(rawContent);
+
+          if (Object.keys(parsed.data).length > 0) {
+            fileData.frontmatter = parsed.data;
+          }
+          fileData.body = parsed.content;
+
+          // Parse markdown to HTML if enabled
+          if (shouldParseMarkdown) {
+            fileData.html = await marked(parsed.content) as string;
+          }
+        } else if (shouldParseMarkdown) {
+           // Parse markdown without frontmatter extraction
+          fileData.html = await marked(rawContent) as string;
+        }
+
+        result[entry.name] = {
+          type: 'file',
+          name: entry.name,
+          path: relativePath,
+          data: fileData,
+        };
+      }
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Generate TypeScript declaration for the markdown data structure
+ */
+function generateTypeDeclaration(
+  data: Record<string, MarkdownNode>,
+  virtualModuleId: string,
+  parseFrontmatter: boolean,
+  parseMarkdown: boolean
+): string {
+  /**
+   * Infer TypeScript type from a JavaScript value
+   */
+  function inferType(value: any): string {
+    if (value === null || value === undefined) return 'any';
+    if (typeof value === 'string') return 'string';
+    if (typeof value === 'number') return 'number';
+    if (typeof value === 'boolean') return 'boolean';
+    if (Array.isArray(value)) {
+      if (value.length === 0) return 'any[]';
+      const elementTypes = [...new Set(value.map(inferType))];
+      if (elementTypes.length === 1) return `${elementTypes[0]}[]`;
+      return `(${elementTypes.join(' | ')})[]`;
+    }
+    if (typeof value === 'object') {
+      const fields = Object.entries(value)
+        .map(([k, v]) => `${k}: ${inferType(v)}`)
+        .join('; ');
+      return `{ ${fields} }`;
+    }
+    return 'any';
+  }
+
+  /**
+   * Generate frontmatter type from actual data
+   */
+  function generateFrontmatterType(frontmatter: Record<string, any> | undefined): string {
+    if (!frontmatter || Object.keys(frontmatter).length === 0) {
+      return 'Record<string, any>';
+    }
+
+    const fields = Object.entries(frontmatter)
+      .map(([key, value]) => `${key}?: ${inferType(value)}`)
+      .join('; ');
+
+    return `{ ${fields} }`;
+  }
+
+  function generateNodeType(node: MarkdownNode, depth: number = 0): string {
+    const indent = '  '.repeat(depth);
+
+    if (node.type === 'file') {
+      const fields = [
+        `${indent}    path: '${node.path}';`,
+        `${indent}    name: '${node.data?.name}';`,
+        `${indent}    content: string;`,
+      ];
+
+      if (parseFrontmatter && node.data?.frontmatter) {
+        const frontmatterType = generateFrontmatterType(node.data.frontmatter);
+        fields.push(`${indent}    frontmatter?: ${frontmatterType};`);
+        fields.push(`${indent}    body?: string;`);
+      } else if (parseFrontmatter) {
+        fields.push(`${indent}    frontmatter?: Record<string, any>;`);
+        fields.push(`${indent}    body?: string;`);
+      }
+
+      if (parseMarkdown) {
+        fields.push(`${indent}    html: string;`);
+      }
+
+      return `{
+${indent}  type: 'file';
+${indent}  name: '${node.name}';
+${indent}  path: '${node.path}';
+${indent}  data: {
+${fields.join('\n')}
+${indent}  };
+${indent}}`;
+    } else {
+      const childrenType = node.children
+        ? Object.entries(node.children)
+            .map(([key, child]) => `${indent}  '${key}': ${generateNodeType(child, depth + 1)}`)
+            .join(';\n')
+        : '';
+
+      return `{
+${indent}  type: 'directory';
+${indent}  name: '${node.name}';
+${indent}  path: '${node.path}';
+${indent}  children: {
+${childrenType}
+${indent}  };
+${indent}}`;
+    }
+  }
+
+  const entries = Object.entries(data)
+    .map(([key, node]) => `  '${key}': ${generateNodeType(node, 1)}`)
+    .join(';\n');
+
+  // Build the MarkdownFile interface based on options
+  const fileInterfaceFields = [
+    '    path: string;',
+    '    name: string;',
+    '    content: string;',
+  ];
+
+  if (parseFrontmatter) {
+    fileInterfaceFields.push('    frontmatter?: Record<string, any>;');
+    fileInterfaceFields.push('    body?: string;');
+  }
+
+  if (parseMarkdown) {
+    fileInterfaceFields.push('    html: string;');
+  }
+
+  return `declare module '${virtualModuleId}' {
+  interface MarkdownFile {
+${fileInterfaceFields.join('\n')}
+  }
+
+  interface MarkdownFileNode {
+    type: 'file';
+    name: string;
+    path: string;
+    data: MarkdownFile;
+  }
+
+  interface MarkdownDirectoryNode {
+    type: 'directory';
+    name: string;
+    path: string;
+    children: Record<string, MarkdownNode>;
+  }
+
+  type MarkdownNode = MarkdownFileNode | MarkdownDirectoryNode;
+
+  const markdownData: {
+${entries}
+  };
+
+  export default markdownData;
+}
+`;
+}
+
+/**
+ * Vite plugin to compile markdown files into a virtual module
+ */
+export default function markdownPlugin(options: MarkdownPluginOptions = {}): Plugin {
+  const {
+    directory = 'docs',
+    virtualModuleId = 'virtual:markdown',
+    parseFrontmatter = true,
+    parseMarkdown = false,
+    generateTypes = true,
+    typesOutputPath = 'types/markdown.d.ts',
+  } = options;
+
+  const resolvedVirtualModuleId = `\0${virtualModuleId}`;
+  let rootDir: string;
+  let markdownDir: string;
+  let markdownData: Record<string, MarkdownNode>;
+
+  const watchedFiles = new Set<string>();
+
+  /**
+   * Collect all markdown files for watching
+   */
+  function collectMarkdownFiles(dir: string): string[] {
+    const files: string[] = [];
+
+    if (!fs.existsSync(dir)) {
+      return files;
+    }
+
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+
+    for (const entry of entries) {
+      const fullPath = path.join(dir, entry.name);
+
+      if (entry.isDirectory()) {
+        files.push(...collectMarkdownFiles(fullPath));
+      } else if (entry.isFile()) {
+        const ext = path.extname(entry.name);
+        if (ext === '.md' || ext === '.markdown') {
+          files.push(fullPath);
+        }
+      }
+    }
+
+    return files;
+  }
+
+  /**
+   * Build the markdown data structure
+   */
+  async function buildMarkdownData() {
+    markdownData = await scanDirectory(markdownDir, markdownDir, parseFrontmatter, parseMarkdown);
+
+    // Update watched files
+    watchedFiles.clear();
+    const files = collectMarkdownFiles(markdownDir);
+    files.forEach(file => watchedFiles.add(file));
+
+    // Generate TypeScript declaration if enabled
+    if (generateTypes && rootDir) {
+      const typeDeclaration = generateTypeDeclaration(markdownData, virtualModuleId, parseFrontmatter, parseMarkdown);
+      const typesPath = path.resolve(rootDir, typesOutputPath);
+      const typesDir = path.dirname(typesPath);
+
+      // Create types directory if it doesn't exist
+      if (!fs.existsSync(typesDir)) {
+        fs.mkdirSync(typesDir, { recursive: true });
+      }
+
+      // Write the type declaration file
+      fs.writeFileSync(typesPath, typeDeclaration, 'utf-8');
+    }
+  }
+
+  return {
+    name: 'vite-plugin-markdown',
+
+    // Enforce this plugin to run before other plugins (especially TypeScript)
+    // This ensures the type declarations are generated before TS checks them
+    enforce: 'pre',
+
+    configResolved(config) {
+      rootDir = config.root;
+      markdownDir = path.resolve(rootDir, directory);
+    },
+
+    async buildStart() {
+      await buildMarkdownData();
+
+      // Add markdown files to watch list
+      for (const file of watchedFiles) {
+        this.addWatchFile(file);
+      }
+    },
+
+    resolveId(id) {
+      if (id === virtualModuleId) {
+        return resolvedVirtualModuleId;
+      }
+    },
+
+    load(id) {
+      if (id === resolvedVirtualModuleId) {
+        return `export default ${JSON.stringify(markdownData, null, 2)};`;
+      }
+    },
+
+    async handleHotUpdate({ file, server }) {
+      // Check if the changed file is a markdown file we're watching
+      if (watchedFiles.has(file)) {
+        // Rebuild the markdown data
+        await buildMarkdownData();
+
+        // Invalidate the virtual module
+        const module = server.moduleGraph.getModuleById(resolvedVirtualModuleId);
+        if (module) {
+          server.moduleGraph.invalidateModule(module);
+        }
+
+        // Trigger HMR
+        server.ws.send({
+          type: 'full-reload',
+          path: '*',
+        });
+      }
+    },
+  };
+}
+
+export { markdownPlugin };
