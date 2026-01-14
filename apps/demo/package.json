@@ -11,6 +11,5 @@
   "dependencies": {
     "@quebi/vite-plugin-markdown": "workspace:*"
   },
-  "devDependencies": {
-  }
+  "devDependencies": {}
 }
