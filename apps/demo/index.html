@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Vite Markdown Plugin Demo</title>
+    <style>
+      * { box-sizing: border-box; }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        margin: 0;
+        padding: 20px;
+        background: #1a1a2e;
+        color: #eee;
+        line-height: 1.6;
+      }
+      h1 { color: #00d9ff; }
+      h2 { color: #7b68ee; margin-top: 2rem; }
+      .container { max-width: 900px; margin: 0 auto; }
+      .file-card {
+        background: #16213e;
+        border-radius: 8px;
+        padding: 16px;
+        margin: 12px 0;
+        border-left: 4px solid #00d9ff;
+      }
+      .file-card h3 { margin: 0 0 8px; color: #00d9ff; }
+      .frontmatter {
+        background: #0f3460;
+        padding: 10px;
+        border-radius: 4px;
+        font-family: monospace;
+        font-size: 13px;
+        margin: 10px 0;
+      }
+      .content {
+        background: #1a1a2e;
+        padding: 12px;
+        border-radius: 4px;
+        margin-top: 10px;
+      }
+      .content h1, .content h2, .content h3 { color: #7b68ee; }
+      .content code { background: #0f3460; padding: 2px 6px; border-radius: 3px; }
+      .content pre { background: #0f3460; padding: 12px; border-radius: 6px; overflow-x: auto; }
+      .tag { background: #7b68ee; color: white; padding: 2px 8px; border-radius: 12px; font-size: 12px; margin-right: 4px; }
+      .structure { background: #0f3460; padding: 16px; border-radius: 8px; font-family: monospace; white-space: pre; overflow-x: auto; }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>Vite Markdown Plugin Demo</h1>
+      <p>This demo loads markdown files from the <code>docs/</code> folder using the plugin.</p>
+
+      <h2>Raw Structure</h2>
+      <div id="structure" class="structure">Loading...</div>
+
+      <h2>Parsed Files</h2>
+      <div id="files"></div>
+    </div>
+    <script type="module" src="/main.ts"></script>
+  </body>
+</html>

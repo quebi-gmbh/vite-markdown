@@ -39,5 +39,5 @@ jobs:
 
       - name: Check build artifacts
         run: |
-          test -f dist/index.mjs || (echo "Missing dist/index.mjs" && exit 1)
-          test -f dist/index.d.mts || (echo "Missing dist/index.d.mts" && exit 1)
+          test -f packages/vite-plugin-markdown/dist/index.mjs || (echo "Missing dist/index.mjs" && exit 1)
+          test -f packages/vite-plugin-markdown/dist/index.d.mts || (echo "Missing dist/index.d.mts" && exit 1)

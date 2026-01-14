@@ -55,48 +55,16 @@ export interface MarkdownPluginOptions {
 }
 
 /**
- * Markdown file structure (runtime - includes all possible fields)
- */
-export interface MarkdownFileRuntime {
-  path: string;
-  name: string;
-  content: string;
-  frontmatter?: Record<string, any>;
-  body?: string;
-  html?: string;
-}
-
-/**
- * Markdown file with conditional properties based on options
- * This is the type-safe version used in generated type declarations
- */
-export type MarkdownFile<
-  TFrontmatter extends boolean = true,
-  TMarkdown extends boolean = false
-> = {
-  path: string;
-  name: string;
-  content: string;
-} & (TFrontmatter extends true
-  ? {
-      frontmatter?: Record<string, any>;
-      body?: string;
-    }
-  : {}) &
-  (TMarkdown extends true
-    ? {
-        html: string;
-      }
-    : {});
-
-/**
  * Markdown file node
  */
 export interface MarkdownFileNode {
   type: 'file';
   name: string;
   path: string;
-  data: MarkdownFileRuntime;
+  content: string;
+  frontmatter?: Record<string, any>;
+  body?: string;
+  html?: string;
 }
 
 /**
@@ -157,9 +125,10 @@ async function scanDirectory(
         const rawContent = await fs.readFile(fullPath, 'utf-8');
         const name = path.basename(entry.name, ext);
 
-        const fileData: MarkdownFileRuntime = {
-          path: relativePath,
+        const fileNode: MarkdownFileNode = {
+          type: 'file',
           name,
+          path: relativePath,
           content: rawContent,
         };
 
@@ -168,25 +137,20 @@ async function scanDirectory(
           const parsed = matter(rawContent);
 
           if (Object.keys(parsed.data).length > 0) {
-            fileData.frontmatter = parsed.data;
+            fileNode.frontmatter = parsed.data;
           }
-          fileData.body = parsed.content;
+          fileNode.body = parsed.content;
 
           // Parse markdown to HTML if enabled
           if (shouldParseMarkdown) {
-            fileData.html = await marked(parsed.content) as string;
+            fileNode.html = await marked(parsed.content) as string;
           }
         } else if (shouldParseMarkdown) {
            // Parse markdown without frontmatter extraction
-          fileData.html = await marked(rawContent) as string;
+          fileNode.html = await marked(rawContent) as string;
         }
 
-        result[entry.name] = {
-          type: 'file',
-          name: entry.name,
-          path: relativePath,
-          data: fileData,
-        };
+        result[entry.name] = fileNode;
       }
     }
   }
@@ -229,13 +193,9 @@ function generateTypeDeclaration(
   /**
    * Generate frontmatter type from actual data
    */
-  function generateFrontmatterType(frontmatter: Record<string, any> | undefined): string {
-    if (!frontmatter || Object.keys(frontmatter).length === 0) {
-      return 'Record<string, any>';
-    }
-
+  function generateFrontmatterType(frontmatter: Record<string, any>): string {
     const fields = Object.entries(frontmatter)
-      .map(([key, value]) => `${key}?: ${inferType(value)}`)
+      .map(([key, value]) => `${key}: ${inferType(value)}`)
       .join('; ');
 
     return `{ ${fields} }`;
@@ -246,31 +206,26 @@ function generateTypeDeclaration(
 
     if (node.type === 'file') {
       const fields = [
-        `${indent}    path: '${node.path}';`,
-        `${indent}    name: '${node.data?.name}';`,
-        `${indent}    content: string;`,
+        `${indent}  type: 'file';`,
+        `${indent}  name: '${node.name}';`,
+        `${indent}  path: '${node.path}';`,
+        `${indent}  content: string;`,
       ];
 
-      if (parseFrontmatter && node.data?.frontmatter) {
-        const frontmatterType = generateFrontmatterType(node.data.frontmatter);
-        fields.push(`${indent}    frontmatter?: ${frontmatterType};`);
-        fields.push(`${indent}    body?: string;`);
-      } else if (parseFrontmatter) {
-        fields.push(`${indent}    frontmatter?: Record<string, any>;`);
-        fields.push(`${indent}    body?: string;`);
+      if (parseFrontmatter) {
+        const frontmatterType = node.frontmatter
+          ? generateFrontmatterType(node.frontmatter)
+          : 'Record<string, never>';
+        fields.push(`${indent}  frontmatter: ${frontmatterType};`);
+        fields.push(`${indent}  body: string;`);
       }
 
       if (parseMarkdown) {
-        fields.push(`${indent}    html: string;`);
+        fields.push(`${indent}  html: string;`);
       }
 
       return `{
-${indent}  type: 'file';
-${indent}  name: '${node.name}';
-${indent}  path: '${node.path}';
-${indent}  data: {
 ${fields.join('\n')}
-${indent}  };
 ${indent}}`;
     } else {
       const childrenType = node.children
@@ -294,43 +249,7 @@ ${indent}}`;
     .map(([key, node]) => `  '${key}': ${generateNodeType(node, 1)}`)
     .join(';\n');
 
-  // Build the MarkdownFile interface based on options
-  const fileInterfaceFields = [
-    '    path: string;',
-    '    name: string;',
-    '    content: string;',
-  ];
-
-  if (parseFrontmatter) {
-    fileInterfaceFields.push('    frontmatter?: Record<string, any>;');
-    fileInterfaceFields.push('    body?: string;');
-  }
-
-  if (parseMarkdown) {
-    fileInterfaceFields.push('    html: string;');
-  }
-
   return `declare module '${virtualModuleId}' {
-  interface MarkdownFile {
-${fileInterfaceFields.join('\n')}
-  }
-
-  interface MarkdownFileNode {
-    type: 'file';
-    name: string;
-    path: string;
-    data: MarkdownFile;
-  }
-
-  interface MarkdownDirectoryNode {
-    type: 'directory';
-    name: string;
-    path: string;
-    children: Record<string, MarkdownNode>;
-  }
-
-  type MarkdownNode = MarkdownFileNode | MarkdownDirectoryNode;
-
   const markdownData: {
 ${entries}
   };

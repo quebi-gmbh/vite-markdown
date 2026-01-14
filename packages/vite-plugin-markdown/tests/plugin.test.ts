@@ -118,9 +118,8 @@ describe('markdownPlugin', () => {
 
       // Check README.md file
       expect(data['README.md'].type).toBe('file');
-      expect(data['README.md'].name).toBe('README.md');
-      expect(data['README.md'].data.name).toBe('README');
-      expect(data['README.md'].data.content).toContain('# Welcome');
+      expect(data['README.md'].name).toBe('README');
+      expect(data['README.md'].content).toContain('# Welcome');
 
       // Check guides directory
       expect(data['guides'].type).toBe('directory');
@@ -148,18 +147,18 @@ describe('markdownPlugin', () => {
       const data = JSON.parse(match[1]);
 
       // Check README.md has frontmatter
-      expect(data['README.md'].data.frontmatter).toBeDefined();
-      expect(data['README.md'].data.frontmatter.title).toBe('Welcome');
-      expect(data['README.md'].data.frontmatter.author).toBe('Test Author');
-      expect(data['README.md'].data.frontmatter.published).toBe(true);
+      expect(data['README.md'].frontmatter).toBeDefined();
+      expect(data['README.md'].frontmatter.title).toBe('Welcome');
+      expect(data['README.md'].frontmatter.author).toBe('Test Author');
+      expect(data['README.md'].frontmatter.published).toBe(true);
 
       // Check body without frontmatter
-      expect(data['README.md'].data.body).toBeDefined();
-      expect(data['README.md'].data.body).toContain('# Welcome');
-      expect(data['README.md'].data.body).not.toContain('---');
+      expect(data['README.md'].body).toBeDefined();
+      expect(data['README.md'].body).toContain('# Welcome');
+      expect(data['README.md'].body).not.toContain('---');
 
       // Check file without frontmatter
-      expect(data['guides'].children['advanced.md'].data.frontmatter).toBeUndefined();
+      expect(data['guides'].children['advanced.md'].frontmatter).toBeUndefined();
     }
   });
 
@@ -178,8 +177,8 @@ describe('markdownPlugin', () => {
       const data = JSON.parse(match[1]);
 
       // Check that frontmatter is not parsed
-      expect(data['README.md'].data.frontmatter).toBeUndefined();
-      expect(data['README.md'].data.body).toBeUndefined();
+      expect(data['README.md'].frontmatter).toBeUndefined();
+      expect(data['README.md'].body).toBeUndefined();
     }
   });
 
@@ -199,12 +198,6 @@ describe('markdownPlugin', () => {
 
     // Check for module declaration
     expect(typeContent).toContain("declare module 'virtual:markdown'");
-
-    // Check for interface definitions
-    expect(typeContent).toContain('interface MarkdownFile');
-    expect(typeContent).toContain('interface MarkdownFileNode');
-    expect(typeContent).toContain('interface MarkdownDirectoryNode');
-    expect(typeContent).toContain('type MarkdownNode = MarkdownFileNode | MarkdownDirectoryNode');
 
     // Check for specific file entries
     expect(typeContent).toContain("'README.md'");
