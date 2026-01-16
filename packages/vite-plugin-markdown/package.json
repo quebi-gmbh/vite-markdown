@@ -17,7 +17,8 @@
   },
   "files": [
     "dist",
-    "types"
+    "types",
+    "README.md"
   ],
   "type": "module",
   "exports": {
@@ -32,6 +33,7 @@
   "scripts": {
     "dev": "tsdown --watch",
     "build": "tsdown",
+    "prepack": "cp ../../README.md .",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:ui": "vitest --ui",

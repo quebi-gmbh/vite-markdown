@@ -1,4 +1,4 @@
-# @quebi-gmbh/vite-plugin-markdown
+# @quebi/vite-plugin-markdown
 
 A Vite plugin that compiles all markdown files within a directory (including subdirectories) into a nested JSON structure exposed as a virtual module with automatic TypeScript type generation.
 
@@ -15,11 +15,11 @@ A Vite plugin that compiles all markdown files within a directory (including sub
 ## Installation
 
 ```bash
-npm install @quebi-gmbh/vite-plugin-markdown
+npm install @quebi/vite-plugin-markdown
 # or
-pnpm install @quebi-gmbh/vite-plugin-markdown
+pnpm install @quebi/vite-plugin-markdown
 # or
-yarn add @quebi-gmbh/vite-plugin-markdown
+yarn add @quebi/vite-plugin-markdown
 ```
 
 ## Usage
@@ -30,7 +30,7 @@ Add the plugin to your `vite.config.ts`:
 
 ```typescript
 import { defineConfig } from 'vite';
-import markdownPlugin from '@quebi-gmbh/vite-plugin-markdown';
+import markdownPlugin from '@quebi/vite-plugin-markdown';
 
 export default defineConfig({
   plugins: [
